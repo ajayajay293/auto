@@ -1,0 +1,22 @@
+{
+  "name": "bot-smm-fayupedia",
+  "version": "1.0.0",
+  "description": "Telegram Bot SMM Panel Fayupedia",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "smm",
+    "fayupedia"
+  ],
+  "author": "YourName",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "telegraf": "^4.15.0",
+    "qrcode": "^1.5.3"
+  }
+}
