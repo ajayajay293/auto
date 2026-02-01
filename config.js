@@ -13,6 +13,6 @@ module.exports = {
 
     channels: [
         '@OrderOTP',
-        '@FajarGanteng'
+        '@JarzXpublik'
     ]
 };
