@@ -218,18 +218,19 @@ bot.action(/^cek_atlantic_(.+)/, async (ctx) => {
         formData.append('api_key', config.atlanticApiKey);
         formData.append('id', depoId);
 
-        // --- CEK STATUS DEPOSIT ---
+        // 1. CEK STATUS TERLEBIH DAHULU
         let response = await axios.post('https://atlantich2h.com/deposit/status', formData.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
         let res = response.data;
-        if (!res.status) return ctx.answerCbQuery("❌ Gagal cek status.");
+        if (!res.status) return ctx.answerCbQuery("❌ Gagal: " + (res.message || "Data tidak ditemukan"));
 
         let d = res.data;
 
-        // --- JIKA MASIH PROCESSING, TRIGGER INSTANT ---
-        if (d.status === 'processing' || d.status === 'pending') {
+        // 2. TRIGGER INSTANT HANYA JIKA STATUS 'PROCESSING'
+        // Jika status masih 'pending', kita tidak tembak API instant dulu
+        if (d.status === 'processing') {
             const instantForm = new URLSearchParams();
             instantForm.append('api_key', config.atlanticApiKey);
             instantForm.append('id', depoId);
@@ -239,22 +240,19 @@ bot.action(/^cek_atlantic_(.+)/, async (ctx) => {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             });
 
-            if (!instantRes.data.status) 
-                return ctx.answerCbQuery("⚠️ Gagal proses deposit instant.");
-
-            d = instantRes.data.data; // update data dengan hasil instant
+            if (instantRes.data.status) {
+                d = instantRes.data.data; // Update data jika instant berhasil
+            }
         }
 
-        // --- CEK STATUS FINAL ---
+        // 3. LOGIKA JIKA SUKSES
         if (d.status === 'success' || d.status === 'completed') {
             const db = loadDb();
             const info = db.pending_depo[depoId];
-            if (!info) return ctx.answerCbQuery("⚠️ Data sudah diproses.");
+            if (!info) return ctx.answerCbQuery("⚠️ Transaksi ini sudah pernah diproses sebelumnya.");
 
-            // Tambah saldo user
+            // Update Saldo & Riwayat
             db.users[info.userId].saldo += parseInt(d.get_balance);
-
-            // Simpan riwayat
             db.users[info.userId].deposits.unshift({
                 id: depoId,
                 amount: parseInt(d.get_balance),
@@ -266,31 +264,42 @@ bot.action(/^cek_atlantic_(.+)/, async (ctx) => {
 
             await ctx.deleteMessage().catch(() => {});
 
-            // Notif User
-            await ctx.reply(`<b>✅ DEPOSIT BERHASIL!</b>
-━━━━━━━━━━━━━━━
-💰 <b>Saldo Masuk:</b> Rp${parseInt(d.get_balance).toLocaleString()}
-🆔 <b>ID:</b> <code>${depoId}</code>
-━━━━━━━━━━━━━━━`, { parse_mode: "HTML" });
+            // NOTIFIKASI USER (FULL DETAIL)
+            const userMsg = `<b>✅ DEPOSIT BERHASIL DIKONFIRMASI!</b>
+━━━━━━━━━━━━━━━━━━━━
+📦 <b>Metode:</b> QRIS (Otomatis)
+🆔 <b>ID Deposit:</b> <code>${depoId}</code>
+💰 <b>Nominal Bayar:</b> Rp${(parseInt(d.nominal) + parseInt(d.fee)).toLocaleString()}
+📥 <b>Saldo Diterima:</b> Rp${parseInt(d.get_balance).toLocaleString()}
+🕒 <b>Waktu Selesai:</b> ${new Date().toLocaleString('id-ID')}
+━━━━━━━━━━━━━━━━━━━━
+<i>Terima kasih! Saldo Anda telah ditambahkan secara otomatis.</i>`;
 
-            // Notif Channel
-            const channelText = `<b>💳 TOP UP SUCCESS</b>
-━━━━━━━━━━━━━━━
+            await ctx.reply(userMsg, { parse_mode: "HTML" });
+
+            // NOTIFIKASI CHANNEL (FULL TEKS & RAPI)
+            const channelText = `<b>💳 TOP UP SUCCESS (SYSTEM)</b>
+━━━━━━━━━━━━━━━━━━━━
 👤 <b>Customer:</b> ${info.username}
-💰 <b>Total Bayar:</b> Rp${parseInt(d.nominal) + parseInt(d.fee)}
-📥 <b>Saldo Masuk:</b> Rp${parseInt(d.get_balance)}
-🚀 <b>Status:</b> Success (Auto)
-━━━━━━━━━━━━━━━`;
+🆔 <b>ID Transaksi:</b> <code>${depoId}</code>
+💰 <b>Total Bayar:</b> Rp${(parseInt(d.nominal) + parseInt(d.fee)).toLocaleString()}
+📥 <b>Saldo Masuk:</b> Rp${parseInt(d.get_balance).toLocaleString()}
+🚀 <b>Status:</b> SUCCESS (Auto-Instant)
+📅 <b>Tanggal:</b> ${new Date().toLocaleString('id-ID')}
+━━━━━━━━━━━━━━━━━━━━
+#DepositSuccess #FayuPediaLog`;
 
             ctx.telegram.sendMessage(CHANNEL_ID, channelText, { parse_mode: "HTML" });
 
+        } else if (d.status === 'pending') {
+            return ctx.answerCbQuery("🔔 Pembayaran masih Pending/Belum terdeteksi. Silakan tunggu atau pastikan dana sudah terkirim.", { show_alert: true });
         } else {
-            return ctx.answerCbQuery("🔔 Pembayaran belum selesai, silakan cek lagi nanti.", { show_alert: true });
+            return ctx.answerCbQuery(`🔔 Status saat ini: ${d.status.toUpperCase()}`, { show_alert: true });
         }
 
     } catch (e) {
-        console.error(e);
-        return ctx.answerCbQuery("⚠️ Gagal cek status deposit.");
+        console.error("Error Detail:", e.message);
+        return ctx.answerCbQuery("⚠️ Terjadi kesalahan jaringan saat cek status.");
     }
 });
 
