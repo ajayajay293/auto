@@ -18,7 +18,20 @@ if (!fs.existsSync(DB_FILE)) {
     fs.writeFileSync(DB_FILE, JSON.stringify({ users: {}, pending_depo: {} }));
 }
 
-const loadDb = () => JSON.parse(fs.readFileSync(DB_FILE));
+const loadDb = () => {
+    try {
+        if (!fs.existsSync(DB_FILE)) {
+            const initialData = { users: {}, pending_depo: {} };
+            fs.writeFileSync(DB_FILE, JSON.stringify(initialData));
+            return initialData;
+        }
+        return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    } catch (e) {
+        console.error("Gagal baca DB:", e);
+        return { users: {}, pending_depo: {} };
+    }
+};
+
 const saveDb = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
 
 const escapeMarkdown = (text) => {
@@ -60,10 +73,11 @@ const callApi = async (path, params = {}) => {
             api_id: config.API_ID,
             api_key: config.API_KEY,
             ...params
-        });
+        }, { timeout: 5000 }); // Tambahkan timeout 5 detik
         return response.data;
     } catch (e) {
-        return { status: false, msg: "Gagal terhubung ke API SMM" };
+        console.error("API Error:", e.message);
+        return { status: false, msg: "Server SMM sedang sibuk." };
     }
 };
 
