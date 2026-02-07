@@ -694,15 +694,24 @@ if (state.step === 'wait_depo') {
         saveDb(db);
 
         // --- AMBIL / GENERATE QR IMAGE ---
-        let qrBuffer;
-        if (d.qr_image) {
-            // jika API sudah kasih URL QR image, ambil via axios
-            const imgResponse = await axios.get(d.qr_image, { responseType: 'arraybuffer' });
-            qrBuffer = Buffer.from(imgResponse.data, 'binary');
-        } else if (d.qr_string) {
-            // jika hanya ada qr_string, generate QR sendiri
-            qrBuffer = await QRCode.toBuffer(d.qr_string, { type: 'png' });
-        }
+        // Ganti bagian pengambilan QR Buffer dengan ini:
+let qrBuffer;
+try {
+    if (d.qr_image) {
+        // Tambahkan timeout dan headers agar tidak dianggap bot oleh server Atlantic
+        const imgResponse = await axios.get(d.qr_image, { 
+            responseType: 'arraybuffer',
+            timeout: 10000, // 10 detik
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        qrBuffer = Buffer.from(imgResponse.data, 'binary');
+    } else {
+        qrBuffer = await QRCode.toBuffer(d.qr_string || "Gagal Generate", { type: 'png' });
+    }
+} catch (error) {
+    console.error("Gagal ambil gambar QR:", error.message);
+    return ctx.reply("❌ Gagal mengambil gambar QRIS, silakan coba lagi.");
+}
 
         // --- KIRIM DETAIL PEMBAYARAN KE USER ---
         await ctx.replyWithPhoto({ source: qrBuffer }, {
