@@ -695,27 +695,33 @@ if (state.step === 'wait_depo') {
 
         // --- AMBIL / GENERATE QR IMAGE ---
         // Ganti bagian pengambilan QR Buffer dengan ini:
+// --- AMBIL / GENERATE QR IMAGE DARI QR_STRING ---
 let qrBuffer;
 try {
-    if (d.qr_image) {
-        // Tambahkan timeout dan headers agar tidak dianggap bot oleh server Atlantic
-        const imgResponse = await axios.get(d.qr_image, { 
-            responseType: 'arraybuffer',
-            timeout: 10000, // 10 detik
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+    if (d.qr_string) {
+        // Generate foto QR secara lokal dari string yang diberikan API
+        qrBuffer = await QRCode.toBuffer(d.qr_string, { 
+            type: 'png',
+            margin: 2,
+            width: 300,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
         });
-        qrBuffer = Buffer.from(imgResponse.data, 'binary');
+        console.log("✅ QR Berhasil di-generate dari qr_string");
     } else {
-        qrBuffer = await QRCode.toBuffer(d.qr_string || "Gagal Generate", { type: 'png' });
+        // Fallback jika qr_string tidak ada (opsional)
+        return ctx.reply("❌ Data QR String tidak ditemukan dari provider.");
     }
 } catch (error) {
-    console.error("Gagal ambil gambar QR:", error.message);
-    return ctx.reply("❌ Gagal mengambil gambar QRIS, silakan coba lagi.");
+    console.error("Gagal generate QR Code:", error.message);
+    return ctx.reply("❌ Gagal membuat gambar pembayaran. Silakan hubungi Admin.");
 }
 
-        // --- KIRIM DETAIL PEMBAYARAN KE USER ---
-        await ctx.replyWithPhoto({ source: qrBuffer }, {
-            caption: `<b>🧾 DETAIL PEMBAYARAN QRIS</b>
+// --- KIRIM DETAIL PEMBAYARAN KE USER ---
+await ctx.replyWithPhoto({ source: qrBuffer }, {
+    caption: `<b>🧾 DETAIL PEMBAYARAN QRIS</b>
 ━━━━━━━━━━━━━━━
 🆔 <b>ID Deposit:</b> <code>${depositId}</code>
 💰 <b>Total Bayar:</b> Rp${totalBayar.toLocaleString()}
@@ -723,12 +729,12 @@ try {
 ⏰ <b>Expired:</b> ${new Date(d.expired_at).toLocaleTimeString()} 
 ━━━━━━━━━━━━━━━
 <i>Scan QRIS di atas. Setelah membayar, klik tombol "CEK STATUS".</i>`,
-            parse_mode: "HTML",
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback("🔄 CEK STATUS", `cek_atlantic_${depositId}`)],
-                [Markup.button.callback("❌ BATALKAN", `cancel_atlantic_${depositId}`)]
-            ])
-        });
+    parse_mode: "HTML",
+    ...Markup.inlineKeyboard([
+        [Markup.button.callback("🔄 CEK STATUS", `cek_atlantic_${depositId}`)],
+        [Markup.button.callback("❌ BATALKAN", `cancel_atlantic_${depositId}`)]
+    ])
+});
 
         ctx.session = null;
 
